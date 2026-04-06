@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { extract } from "../src/core/extractor.js";
+import { extract, extractFirstSentence } from "../src/core/extractor.js";
 
 const minimalHtml = `
 <!DOCTYPE html>
@@ -83,6 +83,14 @@ describe("extract", () => {
     expect(page!.description).toBe("A full test page description");
   });
 
+  it("extracts fallback description from content", () => {
+    const page = extract("https://example.com/docs/intro", fullHtml);
+    expect(page).not.toBeNull();
+    expect(page!.fallbackDescription).toBeTruthy();
+    expect(page!.fallbackDescription.length).toBeGreaterThan(0);
+    expect(page!.fallbackDescription.length).toBeLessThanOrEqual(150);
+  });
+
   it("produces markdown without script content", () => {
     const page = extract("https://example.com/docs/intro", fullHtml);
     expect(page).not.toBeNull();
@@ -133,5 +141,33 @@ describe("extract", () => {
       expect(page).not.toBeNull();
       expect(page!.section).toBe("Api Reference");
     });
+  });
+});
+
+describe("extractFirstSentence", () => {
+  it("extracts first sentence from markdown", () => {
+    const md = "# Heading\n\nThis is the first sentence. This is the second.";
+    expect(extractFirstSentence(md)).toBe("This is the first sentence.");
+  });
+
+  it("skips headings and short lines", () => {
+    const md = "# Title\n\nShort\n\nThis is a longer line that should be picked up as the fallback description.";
+    expect(extractFirstSentence(md)).toBe("This is a longer line that should be picked up as the fallback description.");
+  });
+
+  it("truncates long sentences to ~150 chars", () => {
+    const longLine = "A".repeat(200) + ". Next sentence.";
+    const result = extractFirstSentence(longLine);
+    expect(result.length).toBeLessThanOrEqual(150);
+    expect(result.endsWith("...")).toBe(true);
+  });
+
+  it("returns empty string for empty markdown", () => {
+    expect(extractFirstSentence("")).toBe("");
+  });
+
+  it("returns the full line when no sentence boundary exists", () => {
+    const md = "This line has no period at all and is long enough to be picked up";
+    expect(extractFirstSentence(md)).toBe(md);
   });
 });

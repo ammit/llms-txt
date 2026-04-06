@@ -1,4 +1,21 @@
 import type { Page, SiteData } from "../types.js";
+import { regroupFlatSections } from "./extractor.js";
+
+// Section sort priority (lower = earlier). Unlisted sections get 500.
+const SECTION_ORDER: Record<string, number> = {
+  Home: 100,
+  Documentation: 200,
+  Guides: 210,
+  "API Reference": 300,
+  Blog: 400,
+  Changelog: 450,
+  FAQ: 460,
+  About: 900,
+};
+
+function sectionSortKey(name: string): number {
+  return SECTION_ORDER[name] ?? 500;
+}
 
 export function generateLlmsTxt(site: SiteData): string {
   const lines: string[] = [];
@@ -13,16 +30,27 @@ export function generateLlmsTxt(site: SiteData): string {
     lines.push("");
   }
 
-  // Group pages by section
-  const sections = groupBySection(site.pages);
+  // Regroup flat sites that would all land in "Home"
+  const pages = regroupFlatSections(site.pages);
 
-  for (const [section, pages] of sections) {
-    lines.push(`## ${section}`);
-    lines.push("");
+  // Detect generic descriptions (appearing on >30% of pages)
+  const genericDescriptions = findGenericDescriptions(pages);
 
-    for (const page of pages) {
-      const desc = page.description ? `: ${page.description}` : "";
-      lines.push(`- [${page.title}](${page.url})${desc}`);
+  // Group pages by section, then sort sections
+  const sections = groupBySection(pages);
+  const sortedSections = sortSections(sections);
+
+  for (const [section, sectionPages] of sortedSections) {
+    // Empty section name means flat site, skip header
+    if (section) {
+      lines.push(`## ${section}`);
+      lines.push("");
+    }
+
+    for (const page of sectionPages) {
+      const desc = pickDescription(page, genericDescriptions);
+      const suffix = desc ? `: ${desc}` : "";
+      lines.push(`- [${page.title}](${page.url})${suffix}`);
     }
 
     lines.push("");
@@ -86,4 +114,56 @@ function groupBySection(pages: Page[]): Map<string, Page[]> {
   }
 
   return sections;
+}
+
+function sortSections(
+  sections: Map<string, Page[]>,
+): [string, Page[]][] {
+  return [...sections.entries()].sort(([a], [b]) => {
+    const orderA = sectionSortKey(a);
+    const orderB = sectionSortKey(b);
+    if (orderA !== orderB) return orderA - orderB;
+    return a.localeCompare(b);
+  });
+}
+
+
+/**
+ * Find descriptions that appear on more than 30% of pages.
+ * These are likely site-wide generic meta descriptions.
+ */
+function findGenericDescriptions(pages: Page[]): Set<string> {
+  if (pages.length === 0) return new Set();
+
+  const counts = new Map<string, number>();
+  for (const page of pages) {
+    if (!page.description) continue;
+    const count = counts.get(page.description) || 0;
+    counts.set(page.description, count + 1);
+  }
+
+  const threshold = pages.length * 0.3;
+  const generic = new Set<string>();
+  for (const [desc, count] of counts) {
+    if (count > threshold) {
+      generic.add(desc);
+    }
+  }
+
+  return generic;
+}
+
+/**
+ * Pick the best description for a page.
+ * If the meta description is generic (site-wide), use the fallback instead.
+ */
+function pickDescription(page: Page, genericDescriptions: Set<string>): string {
+  const metaDesc = page.description;
+
+  // If meta description is missing or generic, use fallback
+  if (!metaDesc || genericDescriptions.has(metaDesc)) {
+    return page.fallbackDescription || "";
+  }
+
+  return metaDesc;
 }

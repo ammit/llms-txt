@@ -7,6 +7,44 @@ interface CrawlResult {
   html: string;
 }
 
+// Regex matching common locale path prefixes like /en/, /de, /zh-cn/, /pt-br etc.
+const LOCALE_PREFIX_RE = /^\/([a-z]{2}(?:-[a-z]{2,4})?)(?:\/|$)/i;
+
+/**
+ * Extract locale code from a URL path, if present.
+ * Returns lowercase locale string or null.
+ */
+function extractLocale(urlPath: string): string | null {
+  const match = urlPath.match(LOCALE_PREFIX_RE);
+  return match ? match[1].toLowerCase() : null;
+}
+
+/**
+ * Strip locale prefix from a URL path to get the "canonical" path.
+ * e.g. /de/guides/routing -> /guides/routing
+ */
+function stripLocale(urlPath: string): string {
+  return urlPath.replace(LOCALE_PREFIX_RE, "/");
+}
+
+/**
+ * Auto-detect the default language from the homepage HTML by reading <html lang="...">.
+ */
+async function detectLanguage(baseUrl: string, timeout: number): Promise<string | null> {
+  try {
+    const html = await fetchPage(baseUrl, timeout, false);
+    if (!html) return null;
+    const match = html.match(/<html[^>]*\slang=["']([^"']+)["']/i);
+    if (match) {
+      // Normalize: "en-US" -> "en"
+      return match[1].split("-")[0].toLowerCase();
+    }
+  } catch {
+    // Ignore errors
+  }
+  return null;
+}
+
 export async function crawl(
   baseUrl: string,
   options: CrawlOptions,
@@ -17,6 +55,21 @@ export async function crawl(
   const results: CrawlResult[] = [];
   let skipped = 0;
   let queue: { url: string; depth: number }[] = [];
+
+  // Resolve language filter: explicit --lang, auto-detect, or none
+  let langFilter = options.lang?.toLowerCase() ?? null;
+  if (!langFilter) {
+    const detected = await detectLanguage(baseUrl, options.timeout);
+    if (detected) {
+      langFilter = detected;
+      if (options.verbose) console.error(`[lang] auto-detected language: ${detected}`);
+    }
+  } else if (options.verbose) {
+    console.error(`[lang] using explicit language filter: ${langFilter}`);
+  }
+
+  // Track canonical paths we've already seen (after stripping locale) for dedup
+  const seenCanonicalPaths = new Set<string>();
 
   // Try sitemap first
   onProgress?.({ phase: "discovery", url: baseUrl, fetched: 0, queued: 0, skipped: 0, depth: 0 });
@@ -37,7 +90,15 @@ export async function crawl(
       if (normalized === normalizeUrl(baseUrl)) return false; // already in queue
       const path = new URL(url).pathname;
       const segments = path.split("/").filter(Boolean).length;
-      return segments - baseSegments <= options.depth;
+      if (segments - baseSegments > options.depth) return false;
+
+      // Locale filtering for sitemap URLs
+      if (langFilter) {
+        const locale = extractLocale(path);
+        if (locale && locale !== langFilter) return false;
+      }
+
+      return true;
     });
 
     skipped += sitemapPages.length - filtered.length;
@@ -56,6 +117,11 @@ export async function crawl(
   }
 
   while (queue.length > 0) {
+    if (options.maxPages > 0 && results.length >= options.maxPages) {
+      if (options.verbose) console.error(`[info] max pages limit reached (${options.maxPages})`);
+      break;
+    }
+
     const batch = queue.splice(0, options.concurrency);
 
     const fetches = batch.map(async ({ url, depth }) => {
@@ -72,6 +138,27 @@ export async function crawl(
         if (options.verbose) console.error(`[skip] ${skipReason}: ${normalized}`);
         return;
       }
+
+      // Locale filtering
+      const urlPath = new URL(normalized).pathname;
+      const locale = extractLocale(urlPath);
+      if (langFilter) {
+        // If URL has a locale prefix that doesn't match the filter, skip it
+        if (locale && locale !== langFilter) {
+          skipped++;
+          if (options.verbose) console.error(`[skip] locale ${locale} (want ${langFilter}): ${normalized}`);
+          return;
+        }
+        // Deduplicate: if we've already seen this canonical path, skip
+        const canonical = stripLocale(urlPath);
+        if (seenCanonicalPaths.has(canonical)) {
+          skipped++;
+          if (options.verbose) console.error(`[skip] locale duplicate: ${normalized}`);
+          return;
+        }
+        seenCanonicalPaths.add(canonical);
+      }
+
       visited.add(normalized);
 
       try {
@@ -88,6 +175,11 @@ export async function crawl(
             skipped,
             depth,
           });
+          return;
+        }
+
+        // Check maxPages limit within concurrent batch
+        if (options.maxPages > 0 && results.length >= options.maxPages) {
           return;
         }
 

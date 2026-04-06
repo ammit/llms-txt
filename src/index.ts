@@ -15,7 +15,11 @@ program
   .option("-c, --concurrency <number>", "parallel requests", "5")
   .option("--json", "output as JSON", false)
   .option("-v, --verbose", "show detailed skip/fetch logging", false)
+  .option("-q, --quiet", "suppress spinner and summary, only raw output", false)
   .option("--timeout <ms>", "fetch timeout in milliseconds", "10000")
+  .option("--lang <code>", "language filter (e.g. en, de). auto-detects from homepage if not set")
+  .option("--max-pages <number>", "max pages to crawl (0 = unlimited)", "0")
+  .option("--min-content-length <chars>", "skip pages with less extracted markdown than this", "50")
   .action(async (url: string, opts) => {
     await generate(url, {
       depth: parseInt(opts.depth, 10),
@@ -27,7 +31,11 @@ program
       full: opts.full,
       json: opts.json,
       verbose: opts.verbose,
+      quiet: opts.quiet,
       timeout: parseInt(opts.timeout, 10),
+      lang: opts.lang,
+      maxPages: parseInt(opts.maxPages, 10),
+      minContentLength: parseInt(opts.minContentLength, 10),
     });
   });
 

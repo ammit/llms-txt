@@ -11,6 +11,7 @@ function makePage(overrides: Partial<Page> = {}): Page {
     url: "https://example.com/docs/intro",
     title: "Introduction",
     description: "Getting started guide",
+    fallbackDescription: "Welcome to the docs.",
     markdown: "# Introduction\n\nWelcome to the docs.",
     section: "Docs",
     ...overrides,
@@ -45,7 +46,7 @@ describe("generateLlmsTxt", () => {
   });
 
   it("omits page description when page has none", () => {
-    const page = makePage({ description: "" });
+    const page = makePage({ description: "", fallbackDescription: "" });
     const result = generateLlmsTxt(makeSite({ pages: [page] }));
     expect(result).toContain("- [Introduction](https://example.com/docs/intro)");
     expect(result).not.toContain(": Getting started");
@@ -73,6 +74,46 @@ describe("generateLlmsTxt", () => {
     const result = generateLlmsTxt(makeSite({ pages: [] }));
     expect(result).toContain("# Example");
     expect(result).not.toContain("##");
+  });
+});
+
+describe("description deduplication", () => {
+  it("uses fallback when most pages share the same description", () => {
+    const genericDesc = "Generic site description repeated everywhere";
+    const pages = [
+      makePage({ title: "Page A", url: "https://example.com/a", description: genericDesc, fallbackDescription: "Unique content about A." }),
+      makePage({ title: "Page B", url: "https://example.com/b", description: genericDesc, fallbackDescription: "Unique content about B." }),
+      makePage({ title: "Page C", url: "https://example.com/c", description: genericDesc, fallbackDescription: "Unique content about C." }),
+      makePage({ title: "Page D", url: "https://example.com/d", description: "A unique description", fallbackDescription: "Fallback for D." }),
+    ];
+    const result = generateLlmsTxt(makeSite({ pages }));
+    // Generic description (on 75% of pages) should be replaced with fallbacks
+    expect(result).not.toContain(genericDesc);
+    expect(result).toContain("Unique content about A.");
+    expect(result).toContain("Unique content about B.");
+    // Page D has a unique description, should keep it
+    expect(result).toContain("A unique description");
+  });
+
+  it("keeps descriptions when they are all unique", () => {
+    const pages = [
+      makePage({ title: "Page A", url: "https://example.com/a", description: "Desc A", fallbackDescription: "Fallback A" }),
+      makePage({ title: "Page B", url: "https://example.com/b", description: "Desc B", fallbackDescription: "Fallback B" }),
+    ];
+    const result = generateLlmsTxt(makeSite({ pages }));
+    expect(result).toContain("Desc A");
+    expect(result).toContain("Desc B");
+    expect(result).not.toContain("Fallback");
+  });
+
+  it("omits description entirely when both meta and fallback are empty", () => {
+    const pages = [
+      makePage({ title: "Page A", url: "https://example.com/a", description: "", fallbackDescription: "" }),
+    ];
+    const result = generateLlmsTxt(makeSite({ pages }));
+    expect(result).toContain("- [Page A](https://example.com/a)");
+    // No colon after the link (no description suffix)
+    expect(result).not.toMatch(/\[Page A\]\(https:\/\/example\.com\/a\):/);
   });
 });
 

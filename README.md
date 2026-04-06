@@ -77,7 +77,10 @@ The generated `llms.txt` follows the [llms.txt standard](https://llmstxt.org/):
 | `--concurrency, -c` | Parallel requests | `5` |
 | `--json` | Output as JSON | `false` |
 | `--verbose, -v` | Show detailed skip/fetch logging | `false` |
+| `--quiet, -q` | Suppress spinner and summary, only raw output | `false` |
 | `--timeout` | Fetch timeout in milliseconds | `10000` |
+| `--lang` | Language filter (e.g. `en`, `de`). Auto-detects from homepage if not set | auto |
+| `--max-pages` | Max pages to crawl (0 = unlimited) | `0` |
 
 ## How it works
 

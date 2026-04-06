@@ -19,7 +19,9 @@ export async function generate(
   const startTime = Date.now();
 
   // Crawl
-  const spinner = ora(`Discovering pages on ${baseUrl}`).start();
+  const spinner = options.quiet
+    ? null
+    : ora(`Discovering pages on ${baseUrl}`).start();
 
   let lastSkipped = 0;
   const crawlResults = await crawl(
@@ -27,6 +29,7 @@ export async function generate(
     options,
     (progress: CrawlProgress) => {
       lastSkipped = progress.skipped;
+      if (!spinner) return;
       if (progress.phase === "discovery") {
         if (progress.queued > 0) {
           spinner.text = `Found ${progress.queued} pages in sitemap (${progress.skipped} filtered by depth)`;
@@ -40,18 +43,20 @@ export async function generate(
     },
   );
 
-  spinner.succeed(`Crawled ${crawlResults.length} pages`);
+  spinner?.succeed(`Crawled ${crawlResults.length} pages`);
 
   // Extract
-  const extractSpinner = ora("Extracting content").start();
+  const extractSpinner = options.quiet
+    ? null
+    : ora("Extracting content").start();
   const pages: Page[] = [];
 
   for (const result of crawlResults) {
-    const page = extract(result.url, result.html);
+    const page = extract(result.url, result.html, options.minContentLength);
     if (page) pages.push(page);
   }
 
-  extractSpinner.succeed(`Extracted ${pages.length} pages`);
+  extractSpinner?.succeed(`Extracted ${pages.length} pages`);
 
   if (options.verbose) {
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -74,6 +79,7 @@ export async function generate(
   if (options.json) {
     const json = generateJson(site);
     output(json, options.output ? withExtension(options.output, ".json") : undefined);
+    if (!options.quiet) printSummary(site, json);
     return;
   }
 
@@ -87,6 +93,16 @@ export async function generate(
       : undefined;
     output(fullTxt, fullPath);
   }
+
+  if (!options.quiet) printSummary(site, llmsTxt);
+}
+
+function printSummary(site: SiteData, content: string): void {
+  const pageCount = site.pages.length;
+  const sections = new Set(site.pages.map((p) => p.section));
+  const sectionCount = sections.size;
+  const sizeKB = (Buffer.byteLength(content, "utf-8") / 1024).toFixed(1);
+  console.error(`Generated: ${pageCount} pages, ${sectionCount} sections, ${sizeKB} KB`);
 }
 
 function ensureProtocol(url: string): string {
