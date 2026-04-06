@@ -1,5 +1,11 @@
 # llms-txt
 
+[![CI](https://github.com/ammit/llms-txt/actions/workflows/ci.yml/badge.svg)](https://github.com/ammit/llms-txt/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/@ammit/llms-txt.svg)](https://www.npmjs.com/package/@ammit/llms-txt)
+[![npm downloads](https://img.shields.io/npm/dm/@ammit/llms-txt.svg)](https://www.npmjs.com/package/@ammit/llms-txt)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Node.js >=20](https://img.shields.io/node/v/@ammit/llms-txt.svg)](https://nodejs.org)
+
 Generate `llms.txt` files for any website. Make your site AI-friendly.
 
 [llms.txt](https://llmstxt.org/) is a standard that helps AI agents understand your website. It converts your pages into clean, token-efficient markdown that LLMs can consume directly, reducing token usage by ~90% compared to raw HTML.
