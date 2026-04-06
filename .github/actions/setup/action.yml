@@ -1,0 +1,19 @@
+name: Setup
+description: Setup Node 20, install deps, lint, build
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: npm
+
+    - run: npm ci
+      shell: bash
+
+    - run: npm run lint
+      shell: bash
+
+    - run: npm run build
+      shell: bash

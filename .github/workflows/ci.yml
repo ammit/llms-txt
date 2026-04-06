@@ -3,8 +3,18 @@ name: CI
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - 'mkdocs.yml'
+      - '.coderabbit.yaml'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - 'mkdocs.yml'
+      - '.coderabbit.yaml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -12,38 +22,24 @@ concurrency:
 
 jobs:
   unit:
-    runs-on: ubuntu-latest
-
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v4
         with:
-          node-version: 20
-          cache: npm
-
-      - run: npm ci
-      - run: npm audit --audit-level=high
-      - run: npm run lint
-      - run: npm run build
+          fetch-depth: 1
+      - uses: ./.github/actions/setup
       - run: npx vitest run --coverage test/extractor.test.ts test/generator.test.ts test/robots.test.ts
       - uses: codecov/codecov-action@v5
         with:
           fail_ci_if_error: false
 
   integration:
-    runs-on: ubuntu-latest
-
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v4
         with:
-          node-version: 20
-          cache: npm
-
-      - run: npm ci
-      - run: npm audit --audit-level=high
-      - run: npm run lint
-      - run: npm run build
+          fetch-depth: 1
+      - uses: ./.github/actions/setup
       - run: npx vitest run test/integration.test.ts
