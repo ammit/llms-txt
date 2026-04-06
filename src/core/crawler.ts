@@ -21,10 +21,24 @@ export async function crawl(
   const sitemapUrls = getSitemapUrls(robots, baseUrl);
   const sitemapPages = await discoverFromSitemaps(sitemapUrls);
 
+  // Always start with the base URL
+  queue = [{ url: baseUrl, depth: 0 }];
+
   if (sitemapPages.length > 0) {
-    queue = sitemapPages.map((url) => ({ url, depth: 0 }));
-  } else {
-    queue = [{ url: baseUrl, depth: 0 }];
+    // Filter sitemap URLs by path depth relative to base URL
+    const basePath = new URL(baseUrl).pathname;
+    const baseSegments = basePath.split("/").filter(Boolean).length;
+
+    const filtered = sitemapPages.filter((url) => {
+      const normalized = normalizeUrl(url);
+      if (normalized === normalizeUrl(baseUrl)) return false; // already in queue
+      const path = new URL(url).pathname;
+      const segments = path.split("/").filter(Boolean).length;
+      return segments - baseSegments <= options.depth;
+    });
+
+    // Sitemap pages are pre-discovered, don't follow links from them
+    queue.push(...filtered.map((url) => ({ url, depth: options.depth })));
   }
 
   while (queue.length > 0) {
