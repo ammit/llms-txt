@@ -14,6 +14,8 @@ program
   .option("--rate <number>", "requests per second", "2")
   .option("-c, --concurrency <number>", "parallel requests", "5")
   .option("--json", "output as JSON", false)
+  .option("-v, --verbose", "show detailed skip/fetch logging", false)
+  .option("--timeout <ms>", "fetch timeout in milliseconds", "10000")
   .action(async (url: string, opts) => {
     await generate(url, {
       depth: parseInt(opts.depth, 10),
@@ -24,6 +26,8 @@ program
       output: opts.output,
       full: opts.full,
       json: opts.json,
+      verbose: opts.verbose,
+      timeout: parseInt(opts.timeout, 10),
     });
   });
 

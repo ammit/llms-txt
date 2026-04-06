@@ -76,6 +76,8 @@ The generated `llms.txt` follows the [llms.txt standard](https://llmstxt.org/):
 | `--rate` | Requests per second | `2` |
 | `--concurrency, -c` | Parallel requests | `5` |
 | `--json` | Output as JSON | `false` |
+| `--verbose, -v` | Show detailed skip/fetch logging | `false` |
+| `--timeout` | Fetch timeout in milliseconds | `10000` |
 
 ## How it works
 

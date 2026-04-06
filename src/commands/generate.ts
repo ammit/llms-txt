@@ -16,14 +16,17 @@ export async function generate(
   options: GenerateOptions,
 ): Promise<void> {
   const baseUrl = ensureProtocol(url);
+  const startTime = Date.now();
 
   // Crawl
   const spinner = ora(`Discovering pages on ${baseUrl}`).start();
 
+  let lastSkipped = 0;
   const crawlResults = await crawl(
     baseUrl,
     options,
     (progress: CrawlProgress) => {
+      lastSkipped = progress.skipped;
       if (progress.phase === "discovery") {
         if (progress.queued > 0) {
           spinner.text = `Found ${progress.queued} pages in sitemap (${progress.skipped} filtered by depth)`;
@@ -49,6 +52,15 @@ export async function generate(
   }
 
   extractSpinner.succeed(`Extracted ${pages.length} pages`);
+
+  if (options.verbose) {
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.error(`\nVerbose summary:`);
+    console.error(`  Fetched:   ${crawlResults.length}`);
+    console.error(`  Skipped:   ${lastSkipped}`);
+    console.error(`  Extracted: ${pages.length}`);
+    console.error(`  Time:      ${elapsed}s\n`);
+  }
 
   if (pages.length === 0) {
     console.error("No pages could be extracted. Check the URL and try again.");

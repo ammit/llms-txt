@@ -4,6 +4,8 @@ export interface CrawlOptions {
   concurrency: number;
   include: string[];
   exclude: string[];
+  timeout: number;
+  verbose: boolean;
 }
 
 export interface Page {
