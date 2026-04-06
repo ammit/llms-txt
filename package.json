@@ -1,5 +1,5 @@
 {
-  "name": "llms-txt",
+  "name": "@ammit/llms-txt",
   "version": "0.1.0",
   "description": "Generate llms.txt files for any website. Make your site AI-friendly.",
   "keywords": [

@@ -9,13 +9,13 @@ Only 5-15% of websites have `llms.txt` today. This tool generates one for you au
 ## Install
 
 ```bash
-npm install -g llms-txt
+npm install -g @ammit/llms-txt
 ```
 
 Or run directly:
 
 ```bash
-npx llms-txt https://example.com
+npx @ammit/llms-txt https://example.com
 ```
 
 ## Usage
