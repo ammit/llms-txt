@@ -22,14 +22,24 @@ export async function generate(
     const parsed = new URL(baseUrl);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
       console.error(`Invalid URL: ${url}. Please provide a valid http/https URL.`);
-      process.exit(1);
+      process.exit(2);
     }
   } catch {
     console.error(`Invalid URL: ${url}. Please provide a valid http/https URL.`);
-    process.exit(1);
+    process.exit(2);
   }
 
   const startTime = Date.now();
+
+  // Set up abort controller for graceful shutdown
+  const abortController = new AbortController();
+  let interrupted = false;
+
+  const onSigint = () => {
+    interrupted = true;
+    abortController.abort();
+  };
+  process.on("SIGINT", onSigint);
 
   // Crawl
   const spinner = options.quiet
@@ -54,9 +64,17 @@ export async function generate(
         spinner.text = `Crawling [${progress.fetched} done, ${progress.queued} queued, ${progress.skipped} skipped] ${path}`;
       }
     },
+    abortController.signal,
   );
 
-  spinner?.succeed(`Crawled ${crawlResults.length} pages`);
+  // Clean up the SIGINT listener so the top-level handler takes over again
+  process.removeListener("SIGINT", onSigint);
+
+  if (interrupted) {
+    spinner?.warn(`Interrupted after crawling ${crawlResults.length} pages`);
+  } else {
+    spinner?.succeed(`Crawled ${crawlResults.length} pages`);
+  }
 
   // Extract
   const extractSpinner = options.quiet
@@ -81,8 +99,16 @@ export async function generate(
   }
 
   if (pages.length === 0) {
+    if (interrupted) {
+      console.error("Interrupted before any pages could be extracted.");
+      process.exit(130);
+    }
     console.error("No pages could be extracted. Check the URL and try again.");
     process.exit(1);
+  }
+
+  if (interrupted) {
+    console.error(`Interrupted. Generated partial output from ${pages.length} pages.`);
   }
 
   // Build site data
