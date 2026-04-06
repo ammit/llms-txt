@@ -1,6 +1,6 @@
 import { JSDOM } from "jsdom";
 import { fetchRobotsTxt, getSitemapUrls } from "./robots.js";
-import type { CrawlOptions } from "../types.js";
+import type { CrawlOptions, CrawlProgress } from "../types.js";
 
 interface CrawlResult {
   url: string;
@@ -10,14 +10,17 @@ interface CrawlResult {
 export async function crawl(
   baseUrl: string,
   options: CrawlOptions,
-  onProgress?: (url: string, count: number, total: number) => void,
+  onProgress?: (progress: CrawlProgress) => void,
 ): Promise<CrawlResult[]> {
   const robots = await fetchRobotsTxt(baseUrl);
   const visited = new Set<string>();
   const results: CrawlResult[] = [];
+  let skipped = 0;
   let queue: { url: string; depth: number }[] = [];
 
   // Try sitemap first
+  onProgress?.({ phase: "discovery", url: baseUrl, fetched: 0, queued: 0, skipped: 0, depth: 0 });
+
   const sitemapUrls = getSitemapUrls(robots, baseUrl);
   const sitemapPages = await discoverFromSitemaps(sitemapUrls);
 
@@ -37,8 +40,19 @@ export async function crawl(
       return segments - baseSegments <= options.depth;
     });
 
+    skipped += sitemapPages.length - filtered.length;
+
     // Sitemap pages are pre-discovered, don't follow links from them
     queue.push(...filtered.map((url) => ({ url, depth: options.depth })));
+
+    onProgress?.({
+      phase: "discovery",
+      url: baseUrl,
+      fetched: 0,
+      queued: queue.length,
+      skipped,
+      depth: 0,
+    });
   }
 
   while (queue.length > 0) {
@@ -46,17 +60,42 @@ export async function crawl(
 
     const fetches = batch.map(async ({ url, depth }) => {
       const normalized = normalizeUrl(url);
-      if (visited.has(normalized)) return;
-      if (!isAllowed(normalized, robots, baseUrl, options)) return;
+      if (visited.has(normalized)) {
+        skipped++;
+        return;
+      }
+      if (!isAllowed(normalized, robots, baseUrl, options)) {
+        skipped++;
+        return;
+      }
       visited.add(normalized);
 
       try {
         await rateLimitDelay(options.rate);
         const html = await fetchPage(normalized);
-        if (!html) return;
+        if (!html) {
+          skipped++;
+          onProgress?.({
+            phase: "crawling",
+            url: normalized,
+            fetched: results.length,
+            queued: queue.length,
+            skipped,
+            depth,
+          });
+          return;
+        }
 
         results.push({ url: normalized, html });
-        onProgress?.(normalized, results.length, visited.size);
+
+        onProgress?.({
+          phase: "crawling",
+          url: normalized,
+          fetched: results.length,
+          queued: queue.length,
+          skipped,
+          depth,
+        });
 
         if (depth < options.depth) {
           const links = extractLinks(html, normalized, baseUrl);
@@ -67,7 +106,7 @@ export async function crawl(
           }
         }
       } catch {
-        // Skip failed pages
+        skipped++;
       }
     });
 

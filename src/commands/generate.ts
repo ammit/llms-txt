@@ -9,7 +9,7 @@ import {
   generateLlmsFullTxt,
   generateJson,
 } from "../core/generator.js";
-import type { GenerateOptions, Page, SiteData } from "../types.js";
+import type { GenerateOptions, Page, SiteData, CrawlProgress } from "../types.js";
 
 export async function generate(
   url: string,
@@ -18,19 +18,26 @@ export async function generate(
   const baseUrl = ensureProtocol(url);
 
   // Crawl
-  const spinner = ora(`Crawling ${baseUrl}`).start();
-  let pageCount = 0;
+  const spinner = ora(`Discovering pages on ${baseUrl}`).start();
 
   const crawlResults = await crawl(
     baseUrl,
     options,
-    (_url, count, _total) => {
-      pageCount = count;
-      spinner.text = `Crawled ${count} pages`;
+    (progress: CrawlProgress) => {
+      if (progress.phase === "discovery") {
+        if (progress.queued > 0) {
+          spinner.text = `Found ${progress.queued} pages in sitemap (${progress.skipped} filtered by depth)`;
+        } else {
+          spinner.text = `Discovering pages on ${baseUrl}`;
+        }
+      } else {
+        const path = new URL(progress.url).pathname;
+        spinner.text = `Crawling [${progress.fetched} done, ${progress.queued} queued, ${progress.skipped} skipped] ${path}`;
+      }
     },
   );
 
-  spinner.succeed(`Crawled ${pageCount} pages`);
+  spinner.succeed(`Crawled ${crawlResults.length} pages`);
 
   // Extract
   const extractSpinner = ora("Extracting content").start();

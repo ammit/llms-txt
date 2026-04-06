@@ -26,3 +26,12 @@ export interface SiteData {
   description: string;
   pages: Page[];
 }
+
+export interface CrawlProgress {
+  phase: "discovery" | "crawling";
+  url: string;
+  fetched: number;
+  queued: number;
+  skipped: number;
+  depth: number;
+}
