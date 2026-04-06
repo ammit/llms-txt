@@ -1,13 +1,9 @@
 name: Setup
-description: Checkout, setup Node 20, install deps, lint, build
+description: Setup Node 20, install deps, lint, build
 
 runs:
   using: composite
   steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 1
-
     - uses: actions/setup-node@v4
       with:
         node-version: 20

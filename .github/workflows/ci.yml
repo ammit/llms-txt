@@ -25,6 +25,9 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
       - uses: ./.github/actions/setup
       - run: npx vitest run --coverage test/extractor.test.ts test/generator.test.ts test/robots.test.ts
       - uses: codecov/codecov-action@v5
@@ -35,5 +38,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
       - uses: ./.github/actions/setup
       - run: npx vitest run test/integration.test.ts
