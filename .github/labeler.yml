@@ -1,0 +1,23 @@
+core:
+  - changed-files:
+    - any-glob-to-any-file: 'src/core/**'
+
+cli:
+  - changed-files:
+    - any-glob-to-any-file: ['src/index.ts', 'src/commands/**']
+
+tests:
+  - changed-files:
+    - any-glob-to-any-file: 'test/**'
+
+ci:
+  - changed-files:
+    - any-glob-to-any-file: ['.github/workflows/**', '.github/dependabot.yml']
+
+docs:
+  - changed-files:
+    - any-glob-to-any-file: ['*.md', 'docs/**']
+
+dependencies:
+  - changed-files:
+    - any-glob-to-any-file: ['package.json', 'package-lock.json']
