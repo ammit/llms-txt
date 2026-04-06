@@ -1,5 +1,5 @@
 {
-  "name": "llms-txt",
+  "name": "llms-txt-gen",
   "version": "0.1.0",
   "description": "Generate llms.txt files for any website. Make your site AI-friendly.",
   "keywords": [
@@ -21,7 +21,7 @@
   "bugs": "https://github.com/ammit/llms-txt/issues",
   "type": "module",
   "bin": {
-    "llms-txt": "./dist/index.js"
+    "llms-txt-gen": "./dist/index.js"
   },
   "main": "./dist/index.js",
   "files": [

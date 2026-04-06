@@ -2,7 +2,7 @@ import { program } from "commander";
 import { generate } from "./commands/generate.js";
 
 program
-  .name("llms-txt")
+  .name("llms-txt-gen")
   .description("Generate llms.txt files for any website")
   .version("0.1.0")
   .argument("<url>", "URL to generate llms.txt for")

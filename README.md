@@ -9,32 +9,32 @@ Only 5-15% of websites have `llms.txt` today. This tool generates one for you au
 ## Install
 
 ```bash
-npm install -g llms-txt
+npm install -g llms-txt-gen
 ```
 
 Or run directly:
 
 ```bash
-npx llms-txt https://example.com
+npx llms-txt-gen https://example.com
 ```
 
 ## Usage
 
 ```bash
 # Generate llms.txt for a site
-llms-txt https://docs.anthropic.com
+llms-txt-gen https://docs.anthropic.com
 
 # Set crawl depth
-llms-txt https://example.com --depth 3
+llms-txt-gen https://example.com --depth 3
 
 # Output to files
-llms-txt https://example.com -o ./llms.txt
+llms-txt-gen https://example.com -o ./llms.txt
 
 # Include/exclude URL patterns
-llms-txt https://example.com --include "/docs/**" --exclude "/blog/**"
+llms-txt-gen https://example.com --include "/docs/**" --exclude "/blog/**"
 
 # Generate llms-full.txt (all content bundled)
-llms-txt https://example.com --full
+llms-txt-gen https://example.com --full
 ```
 
 ## What it does
