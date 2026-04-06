@@ -16,6 +16,19 @@ export async function generate(
   options: GenerateOptions,
 ): Promise<void> {
   const baseUrl = ensureProtocol(url);
+
+  // Validate URL before crawling
+  try {
+    const parsed = new URL(baseUrl);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      console.error(`Invalid URL: ${url}. Please provide a valid http/https URL.`);
+      process.exit(1);
+    }
+  } catch {
+    console.error(`Invalid URL: ${url}. Please provide a valid http/https URL.`);
+    process.exit(1);
+  }
+
   const startTime = Date.now();
 
   // Crawl

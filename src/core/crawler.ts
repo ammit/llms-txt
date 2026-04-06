@@ -7,6 +7,52 @@ interface CrawlResult {
   html: string;
 }
 
+const MAX_CONTENT_LENGTH = 10 * 1024 * 1024; // 10MB
+
+const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
+const MAX_RETRIES = 2; // 3 total attempts
+const BACKOFF_BASE_MS = 1000;
+
+/**
+ * Fetch with retry logic for transient network errors.
+ * Retries up to MAX_RETRIES times with exponential backoff.
+ */
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  verbose: boolean,
+): Promise<Response> {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES + 1; attempt++) {
+    try {
+      const res = await fetch(url, init);
+
+      if (RETRYABLE_STATUS_CODES.has(res.status) && attempt <= MAX_RETRIES) {
+        if (verbose) console.error(`[retry] attempt ${attempt + 1}/${MAX_RETRIES + 1}: ${url}`);
+        await new Promise((resolve) => setTimeout(resolve, BACKOFF_BASE_MS * Math.pow(2, attempt - 1)));
+        continue;
+      }
+
+      return res;
+    } catch (err) {
+      lastError = err;
+
+      // Don't retry timeout aborts (user-initiated or AbortSignal.timeout)
+      if (err instanceof DOMException && err.name === "AbortError") throw err;
+      if (err instanceof DOMException && err.name === "TimeoutError") throw err;
+
+      if (attempt <= MAX_RETRIES) {
+        if (verbose) console.error(`[retry] attempt ${attempt + 1}/${MAX_RETRIES + 1}: ${url}`);
+        await new Promise((resolve) => setTimeout(resolve, BACKOFF_BASE_MS * Math.pow(2, attempt - 1)));
+        continue;
+      }
+    }
+  }
+
+  throw lastError;
+}
+
 // Regex matching common locale path prefixes like /en/, /de, /zh-cn/, /pt-br etc.
 const LOCALE_PREFIX_RE = /^\/([a-z]{2}(?:-[a-z]{2,4})?)(?:\/|$)/i;
 
@@ -49,6 +95,7 @@ export async function crawl(
   baseUrl: string,
   options: CrawlOptions,
   onProgress?: (progress: CrawlProgress) => void,
+  signal?: AbortSignal,
 ): Promise<CrawlResult[]> {
   const robots = await fetchRobotsTxt(baseUrl);
   const visited = new Set<string>();
@@ -117,6 +164,10 @@ export async function crawl(
   }
 
   while (queue.length > 0) {
+    if (signal?.aborted) {
+      break;
+    }
+
     if (options.maxPages > 0 && results.length >= options.maxPages) {
       if (options.verbose) console.error(`[info] max pages limit reached (${options.maxPages})`);
       break;
@@ -163,7 +214,7 @@ export async function crawl(
 
       try {
         await rateLimitDelay(options.rate);
-        const html = await fetchPage(normalized, options.timeout, options.verbose);
+        const html = await fetchPage(normalized, options.timeout, options.verbose, signal);
         if (!html) {
           skipped++;
           if (options.verbose) console.error(`[skip] non-HTML or failed: ${normalized}`);
@@ -218,7 +269,9 @@ async function discoverFromSitemaps(sitemapUrls: string[]): Promise<string[]> {
 
   for (const sitemapUrl of sitemapUrls) {
     try {
-      const res = await fetch(sitemapUrl);
+      const res = await fetch(sitemapUrl, {
+        signal: AbortSignal.timeout(10000),
+      });
       if (!res.ok) continue;
       const text = await res.text();
 
@@ -242,21 +295,58 @@ async function discoverFromSitemaps(sitemapUrls: string[]): Promise<string[]> {
   return urls;
 }
 
-async function fetchPage(url: string, timeout: number, verbose: boolean): Promise<string | null> {
+async function fetchPage(url: string, timeout: number, verbose: boolean, abortSignal?: AbortSignal): Promise<string | null> {
   try {
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent": "llms-txt/0.1 (+https://github.com/ammit/llms-txt)",
-        Accept: "text/html",
+    // Combine timeout and abort signals
+    const timeoutSignal = AbortSignal.timeout(timeout);
+    const signal = abortSignal
+      ? AbortSignal.any([timeoutSignal, abortSignal])
+      : timeoutSignal;
+
+    const res = await fetchWithRetry(
+      url,
+      {
+        headers: {
+          "User-Agent": "llms-txt/0.1 (+https://github.com/ammit/llms-txt)",
+          Accept: "text/html",
+        },
+        signal,
       },
-      signal: AbortSignal.timeout(timeout),
-    });
+      verbose,
+    );
 
     if (!res.ok) return null;
     const contentType = res.headers.get("content-type") || "";
     if (!contentType.includes("text/html")) return null;
 
-    return await res.text();
+    // Skip pages larger than 10MB (likely binary files misserved as text/html)
+    const contentLength = res.headers.get("content-length");
+    if (contentLength && parseInt(contentLength, 10) > MAX_CONTENT_LENGTH) {
+      if (verbose) console.error(`[skip] content too large (${contentLength} bytes): ${url}`);
+      return null;
+    }
+
+    // Read body with a size cap to avoid OOM on massive pages
+    const reader = res.body?.getReader();
+    if (!reader) return await res.text();
+
+    const chunks: Uint8Array[] = [];
+    let totalSize = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalSize += value.byteLength;
+      if (totalSize > MAX_CONTENT_LENGTH) {
+        reader.cancel();
+        if (verbose) console.error(`[skip] body exceeded 10MB while reading: ${url}`);
+        return null;
+      }
+      chunks.push(value);
+    }
+
+    const decoder = new TextDecoder();
+    return chunks.map((c) => decoder.decode(c, { stream: true })).join("") + decoder.decode();
   } catch (err) {
     if (err instanceof DOMException && err.name === "TimeoutError") {
       if (verbose) console.error(`[skip] timeout: ${url}`);
@@ -362,16 +452,19 @@ function matchGlob(path: string, pattern: string): boolean {
   return new RegExp(`^${regex}$`).test(path);
 }
 
-let lastRequestTime = 0;
+/**
+ * Promise-based rate limiter that is safe with concurrent requests.
+ * Ensures at most `rate` requests per second by chaining through a single promise.
+ */
+let rateLimitChain: Promise<void> = Promise.resolve();
 
 async function rateLimitDelay(rate: number): Promise<void> {
   const minInterval = 1000 / rate;
-  const now = Date.now();
-  const elapsed = now - lastRequestTime;
 
-  if (elapsed < minInterval) {
-    await new Promise((resolve) => setTimeout(resolve, minInterval - elapsed));
-  }
+  const waitForSlot = rateLimitChain.then(
+    () => new Promise<void>((resolve) => setTimeout(resolve, minInterval)),
+  );
 
-  lastRequestTime = Date.now();
+  rateLimitChain = waitForSlot;
+  await waitForSlot;
 }

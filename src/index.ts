@@ -1,6 +1,17 @@
 import { program } from "commander";
 import { generate } from "./commands/generate.js";
 
+// Graceful shutdown on Ctrl+C
+process.on("SIGINT", () => {
+  console.error("\nInterrupted. Exiting...");
+  process.exit(130); // Standard SIGINT exit code
+});
+
+process.on("unhandledRejection", (err) => {
+  console.error("Unexpected error:", err instanceof Error ? err.message : err);
+  process.exit(1);
+});
+
 program
   .name("llms-txt")
   .description("Generate llms.txt files for any website")
