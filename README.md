@@ -99,6 +99,19 @@ URL --> Sitemap/Link Discovery --> Content Extraction --> Markdown Conversion --
 - **Conversion**: Turndown produces clean GFM markdown
 - **Assembly**: Groups pages by URL path into sections, generates descriptions
 
+## Shell Completions
+
+```bash
+# Bash
+echo 'eval "$(llms-txt completion bash)"' >> ~/.bashrc
+
+# Zsh
+echo 'eval "$(llms-txt completion zsh)"' >> ~/.zshrc
+
+# Fish
+llms-txt completion fish > ~/.config/fish/completions/llms-txt.fish
+```
+
 ## Contributing
 
 Contributions welcome. Please open an issue first to discuss what you'd like to change.
