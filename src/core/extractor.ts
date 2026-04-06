@@ -2,6 +2,7 @@ import { JSDOM } from "jsdom";
 import { Readability } from "@mozilla/readability";
 import TurndownService from "turndown";
 import { gfm } from "turndown-plugin-gfm";
+import { MAX_HTML_SIZE } from "./crawler.js";
 import type { Page } from "../types.js";
 
 const turndown = new TurndownService({
@@ -22,57 +23,69 @@ export function extract(
   url: string,
   html: string,
   minContentLength: number = 50,
+  verbose: boolean = false,
 ): Page | null {
-  const dom = new JSDOM(html, { url });
-  const doc = dom.window.document;
+  try {
+    // Skip very large HTML to avoid OOM in JSDOM (>5MB)
+    if (html.length > MAX_HTML_SIZE) {
+      if (verbose) console.error(`[skip] HTML too large for extraction (${html.length} bytes): ${url}`);
+      return null;
+    }
 
-  // Skip pages with meta http-equiv="refresh" (redirect pages)
-  const metaRefresh = doc.querySelector('meta[http-equiv="refresh" i]');
-  if (metaRefresh) return null;
+    const dom = new JSDOM(html, { url });
+    const doc = dom.window.document;
 
-  // Get metadata before Readability mutates the DOM
-  const title = getTitle(doc);
-  const description = getDescription(doc);
+    // Skip pages with meta http-equiv="refresh" (redirect pages)
+    const metaRefresh = doc.querySelector('meta[http-equiv="refresh" i]');
+    if (metaRefresh) return null;
 
-  // Skip if title indicates a redirect
-  if (title && /redirect/i.test(title)) return null;
+    // Get metadata before Readability mutates the DOM
+    const title = getTitle(doc);
+    const description = getDescription(doc);
 
-  // Skip if both title and description are empty
-  if (!title && !description) return null;
+    // Skip if title indicates a redirect
+    if (title && /redirect/i.test(title)) return null;
 
-  // Skip pages with very little body text (e.g. "Loading..." or "Redirecting...")
-  const bodyText = doc.body?.textContent?.trim() || "";
-  if (bodyText.length < minContentLength) return null;
+    // Skip if both title and description are empty
+    if (!title && !description) return null;
 
-  const section = deriveSection(url);
+    // Skip pages with very little body text (e.g. "Loading..." or "Redirecting...")
+    const bodyText = doc.body?.textContent?.trim() || "";
+    if (bodyText.length < minContentLength) return null;
 
-  // Extract main content with Readability
-  const reader = new Readability(doc);
-  const article = reader.parse();
+    const section = deriveSection(url);
 
-  if (!article || !article.content) return null;
+    // Extract main content with Readability
+    const reader = new Readability(doc);
+    const article = reader.parse();
 
-  // Convert to markdown
-  const markdown = turndown
-    .turndown(article.content)
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+    if (!article || !article.content) return null;
 
-  if (!markdown) return null;
+    // Convert to markdown
+    const markdown = turndown
+      .turndown(article.content)
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
 
-  // Skip pages with too little extracted content
-  if (markdown.length < minContentLength) return null;
+    if (!markdown) return null;
 
-  const fallbackDescription = extractFirstSentence(markdown);
+    // Skip pages with too little extracted content
+    if (markdown.length < minContentLength) return null;
 
-  return {
-    url,
-    title: article.title || title,
-    description,
-    fallbackDescription,
-    markdown,
-    section,
-  };
+    const fallbackDescription = extractFirstSentence(markdown);
+
+    return {
+      url,
+      title: article.title || title,
+      description,
+      fallbackDescription,
+      markdown,
+      section,
+    };
+  } catch (err) {
+    if (verbose) console.error(`[skip] extraction failed for ${url}: ${err}`);
+    return null;
+  }
 }
 
 export function extractFirstSentence(markdown: string): string {

@@ -22,6 +22,9 @@ export function getSitemapUrls(
   baseUrl: string,
 ): string[] {
   const sitemaps = robots.getSitemaps();
-  if (sitemaps.length > 0) return sitemaps;
+  if (sitemaps.length > 0) {
+    // Resolve relative sitemap paths against the base URL
+    return sitemaps.map((s) => new URL(s, baseUrl).href);
+  }
   return [new URL("/sitemap.xml", baseUrl).href];
 }

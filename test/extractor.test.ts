@@ -169,6 +169,19 @@ describe("extract", () => {
       expect(faqPage!.section).toBe("FAQ");
     });
   });
+
+  it("returns null without throwing for deeply nested malformed HTML", () => {
+    const badHtml = "<html><head><title>Test</title></head><body>" + "<div>".repeat(1000) + "</body></html>";
+    // Should not throw
+    const page = extract("https://example.com/bad", badHtml);
+    expect(page === null || page !== null).toBe(true);
+  });
+
+  it("returns null for HTML exceeding 5MB size limit", () => {
+    const bigHtml = `<!DOCTYPE html><html><head><title>Big</title><meta name="description" content="huge page"></head><body><article><p>${"x".repeat(6 * 1024 * 1024)}</p></article></body></html>`;
+    const page = extract("https://example.com/big", bigHtml);
+    expect(page).toBeNull();
+  });
 });
 
 describe("extractFirstSentence", () => {

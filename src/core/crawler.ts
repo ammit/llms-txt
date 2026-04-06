@@ -132,7 +132,7 @@ export async function crawl(
     const basePath = new URL(baseUrl).pathname;
     const baseSegments = basePath.split("/").filter(Boolean).length;
 
-    const filtered = sitemapPages.filter((url) => {
+    let filtered = sitemapPages.filter((url) => {
       const normalized = normalizeUrl(url);
       if (normalized === normalizeUrl(baseUrl)) return false; // already in queue
       const path = new URL(url).pathname;
@@ -149,6 +149,19 @@ export async function crawl(
     });
 
     skipped += sitemapPages.length - filtered.length;
+
+    // Cap sitemap URLs to avoid crawling enormous sitemaps
+    if (filtered.length > MAX_SITEMAP_URLS) {
+      console.error(`[warn] sitemap returned ${filtered.length} URLs after filtering, truncating to ${MAX_SITEMAP_URLS}`);
+      skipped += filtered.length - MAX_SITEMAP_URLS;
+      filtered = filtered.slice(0, MAX_SITEMAP_URLS);
+    }
+
+    // Also respect --max-pages for sitemap URLs (reserve 1 slot for base URL)
+    if (options.maxPages > 0 && filtered.length > options.maxPages - 1) {
+      skipped += filtered.length - (options.maxPages - 1);
+      filtered = filtered.slice(0, options.maxPages - 1);
+    }
 
     // Sitemap pages are pre-discovered, don't follow links from them
     queue.push(...filtered.map((url) => ({ url, depth: options.depth })));
@@ -264,10 +277,47 @@ export async function crawl(
   return results;
 }
 
-async function discoverFromSitemaps(sitemapUrls: string[]): Promise<string[]> {
+/**
+ * Decode common XML/HTML entities found in sitemap URLs.
+ * Sitemaps often contain &amp; instead of & in <loc> tags.
+ */
+function decodeXmlEntities(str: string): string {
+  return str
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'");
+}
+
+/** Common binary file signatures (magic bytes as string prefixes). */
+const BINARY_SIGNATURES = ["%PDF", "\x89PNG", "GIF8", "\xFF\xD8\xFF", "PK"];
+
+/**
+ * Check if content looks like binary data by inspecting the first few bytes.
+ */
+function isBinaryContent(text: string): boolean {
+  const head = text.slice(0, 8);
+  return BINARY_SIGNATURES.some((sig) => head.startsWith(sig));
+}
+
+/** Maximum HTML size (5MB) before skipping extraction to avoid OOM in JSDOM. */
+export const MAX_HTML_SIZE = 5 * 1024 * 1024;
+
+/** Maximum number of URLs to keep from sitemap discovery after filtering. */
+const MAX_SITEMAP_URLS = 1000;
+
+async function discoverFromSitemaps(
+  sitemapUrls: string[],
+  visited: Set<string> = new Set(),
+): Promise<string[]> {
   const urls: string[] = [];
 
   for (const sitemapUrl of sitemapUrls) {
+    // Cycle detection: skip sitemaps we've already visited
+    if (visited.has(sitemapUrl)) continue;
+    visited.add(sitemapUrl);
+
     try {
       const res = await fetch(sitemapUrl, {
         signal: AbortSignal.timeout(10000),
@@ -278,10 +328,10 @@ async function discoverFromSitemaps(sitemapUrls: string[]): Promise<string[]> {
       // Extract URLs from sitemap XML
       const locMatches = text.matchAll(/<loc>(.*?)<\/loc>/g);
       for (const match of locMatches) {
-        const url = match[1].trim();
+        const url = decodeXmlEntities(match[1].trim());
         // Check if it's a nested sitemap
         if (url.endsWith(".xml") || url.endsWith(".xml.gz")) {
-          const nested = await discoverFromSitemaps([url]);
+          const nested = await discoverFromSitemaps([url], visited);
           urls.push(...nested);
         } else {
           urls.push(url);
@@ -346,7 +396,15 @@ async function fetchPage(url: string, timeout: number, verbose: boolean, abortSi
     }
 
     const decoder = new TextDecoder();
-    return chunks.map((c) => decoder.decode(c, { stream: true })).join("") + decoder.decode();
+    const text = chunks.map((c) => decoder.decode(c, { stream: true })).join("") + decoder.decode();
+
+    // Skip binary content misserved as text/html (e.g. PDFs, PNGs, ZIPs)
+    if (isBinaryContent(text)) {
+      if (verbose) console.error(`[skip] binary content detected: ${url}`);
+      return null;
+    }
+
+    return text;
   } catch (err) {
     if (err instanceof DOMException && err.name === "TimeoutError") {
       if (verbose) console.error(`[skip] timeout: ${url}`);

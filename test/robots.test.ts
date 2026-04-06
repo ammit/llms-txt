@@ -29,4 +29,13 @@ describe("getSitemapUrls", () => {
     const urls = getSitemapUrls(robots, "https://example.com");
     expect(urls).toEqual(["https://example.com/sitemap.xml"]);
   });
+
+  it("resolves relative sitemap paths against the base URL", () => {
+    const robots = robotsParser(
+      "https://example.com/robots.txt",
+      "User-agent: *\nAllow: /\nSitemap: /sitemaps/main.xml"
+    );
+    const urls = getSitemapUrls(robots, "https://example.com");
+    expect(urls).toEqual(["https://example.com/sitemaps/main.xml"]);
+  });
 });

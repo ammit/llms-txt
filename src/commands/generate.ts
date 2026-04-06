@@ -83,7 +83,7 @@ export async function generate(
   const pages: Page[] = [];
 
   for (const result of crawlResults) {
-    const page = extract(result.url, result.html, options.minContentLength);
+    const page = extract(result.url, result.html, options.minContentLength, options.verbose);
     if (page) pages.push(page);
   }
 
