@@ -195,6 +195,7 @@ function extractLinks(
         continue;
 
       resolved.hash = "";
+      resolved.search = "";
       links.push(resolved.href);
     } catch {
       // Skip invalid URLs
@@ -207,6 +208,7 @@ function extractLinks(
 function normalizeUrl(url: string): string {
   const u = new URL(url);
   u.hash = "";
+  u.search = "";
   // Remove trailing slash for consistency (except root)
   if (u.pathname !== "/" && u.pathname.endsWith("/")) {
     u.pathname = u.pathname.slice(0, -1);
