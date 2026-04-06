@@ -54,15 +54,15 @@ describe("generateLlmsTxt", () => {
 
   it("groups pages by section", () => {
     const pages = [
-      makePage({ section: "Docs", title: "Intro", url: "https://example.com/docs/intro" }),
-      makePage({ section: "Docs", title: "API", url: "https://example.com/docs/api" }),
+      makePage({ section: "Documentation", title: "Intro", url: "https://example.com/docs/intro" }),
+      makePage({ section: "Documentation", title: "API", url: "https://example.com/docs/api" }),
       makePage({ section: "Blog", title: "Post 1", url: "https://example.com/blog/post-1" }),
     ];
     const result = generateLlmsTxt(makeSite({ pages }));
-    expect(result).toContain("## Docs");
+    expect(result).toContain("## Documentation");
     expect(result).toContain("## Blog");
-    // Docs section should have two entries
-    const docsIndex = result.indexOf("## Docs");
+    // Documentation (200) sorts before Blog (400)
+    const docsIndex = result.indexOf("## Documentation");
     const blogIndex = result.indexOf("## Blog");
     expect(docsIndex).toBeLessThan(blogIndex);
     const docsSection = result.slice(docsIndex, blogIndex);

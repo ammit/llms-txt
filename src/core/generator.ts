@@ -142,10 +142,10 @@ function findGenericDescriptions(pages: Page[]): Set<string> {
     counts.set(page.description, count + 1);
   }
 
-  const threshold = pages.length * 0.3;
+  const threshold = Math.max(2, pages.length * 0.3);
   const generic = new Set<string>();
   for (const [desc, count] of counts) {
-    if (count > threshold) {
+    if (count >= threshold) {
       generic.add(desc);
     }
   }

@@ -124,10 +124,10 @@ describe("extract", () => {
       expect(page!.section).toBe("Home");
     });
 
-    it("derives section from first path segment", () => {
+    it("maps known prefix 'docs' to Documentation", () => {
       const page = extract("https://example.com/docs/intro", fullHtml);
       expect(page).not.toBeNull();
-      expect(page!.section).toBe("Docs");
+      expect(page!.section).toBe("Documentation");
     });
 
     it("formats hyphenated sections", () => {
@@ -136,10 +136,37 @@ describe("extract", () => {
       expect(page!.section).toBe("Getting Started");
     });
 
-    it("formats underscored sections", () => {
+    it("formats underscored segments not in the known map", () => {
       const page = extract("https://example.com/api_reference/endpoints", fullHtml);
       expect(page).not.toBeNull();
+      // "api_reference" is not in SECTION_MAP, falls through to formatSection
       expect(page!.section).toBe("Api Reference");
+    });
+
+    it("maps exact 'api' prefix to API Reference", () => {
+      const page = extract("https://example.com/api/endpoints", fullHtml);
+      expect(page).not.toBeNull();
+      expect(page!.section).toBe("API Reference");
+    });
+
+    it("maps year-based paths to Blog", () => {
+      const page = extract("https://example.com/2025/03/31/my-post", fullHtml);
+      expect(page).not.toBeNull();
+      expect(page!.section).toBe("Blog");
+    });
+
+    it("maps known prefixes to standard section names", () => {
+      const blogPage = extract("https://example.com/posts/hello-world", fullHtml);
+      expect(blogPage).not.toBeNull();
+      expect(blogPage!.section).toBe("Blog");
+
+      const guidePage = extract("https://example.com/tutorials/setup", fullHtml);
+      expect(guidePage).not.toBeNull();
+      expect(guidePage!.section).toBe("Guides");
+
+      const faqPage = extract("https://example.com/faq/general", fullHtml);
+      expect(faqPage).not.toBeNull();
+      expect(faqPage!.section).toBe("FAQ");
     });
   });
 });
