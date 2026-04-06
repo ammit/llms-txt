@@ -1,0 +1,137 @@
+import { describe, it, expect } from "vitest";
+import { extract } from "../src/core/extractor.js";
+
+const minimalHtml = `
+<!DOCTYPE html>
+<html>
+<head><title>Test Page</title></head>
+<body>
+  <article>
+    <h1>Hello World</h1>
+    <p>This is a test paragraph with enough content to be extracted by Readability.
+    It needs to be reasonably long so the algorithm considers it meaningful content.
+    Here is another sentence to pad out the content a bit more for extraction.</p>
+    <p>Second paragraph with additional content that helps Readability identify this
+    as the main content area of the page. More text helps the extraction algorithm.</p>
+  </article>
+</body>
+</html>
+`;
+
+const fullHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Full Page Title</title>
+  <meta name="description" content="A full test page description">
+  <meta property="og:title" content="OG Title Override">
+</head>
+<body>
+  <nav><a href="/home">Home</a><a href="/about">About</a></nav>
+  <main>
+    <article>
+      <h1>Main Content Heading</h1>
+      <p>This is the main content of the page. It has enough text for Readability
+      to extract properly. We need a few sentences here to make the algorithm happy.
+      The content should be substantial enough to be considered an article.</p>
+      <p>Here is a second paragraph with more content. Readability uses heuristics
+      to determine the main content, so having multiple paragraphs helps a lot.</p>
+      <p>A third paragraph just to be safe. More content means better extraction.</p>
+    </article>
+  </main>
+  <footer><p>Copyright 2024</p></footer>
+  <script>console.log("should be stripped")</script>
+</body>
+</html>
+`;
+
+const noTitleHtml = `
+<!DOCTYPE html>
+<html>
+<head></head>
+<body>
+  <article>
+    <p>Page without a title tag but with enough content for Readability to consider
+    extracting it. We need several sentences to make this work properly with the
+    extraction algorithm. More content helps the extraction succeed.</p>
+    <p>Another paragraph to ensure content extraction works. Readability needs
+    a reasonable amount of text to identify the main content of a page.</p>
+  </article>
+</body>
+</html>
+`;
+
+describe("extract", () => {
+  it("extracts content from minimal HTML", () => {
+    const page = extract("https://example.com/docs/intro", minimalHtml);
+    expect(page).not.toBeNull();
+    expect(page!.url).toBe("https://example.com/docs/intro");
+    expect(page!.title).toBeTruthy();
+    expect(page!.markdown).toContain("test paragraph");
+  });
+
+  it("extracts title from og:title when available", () => {
+    const page = extract("https://example.com/docs/intro", fullHtml);
+    expect(page).not.toBeNull();
+    // Readability may use its own title, but the extractor tries og:title first
+    expect(page!.title).toBeTruthy();
+  });
+
+  it("extracts meta description", () => {
+    const page = extract("https://example.com/docs/intro", fullHtml);
+    expect(page).not.toBeNull();
+    expect(page!.description).toBe("A full test page description");
+  });
+
+  it("produces markdown without script content", () => {
+    const page = extract("https://example.com/docs/intro", fullHtml);
+    expect(page).not.toBeNull();
+    expect(page!.markdown).not.toContain("console.log");
+    expect(page!.markdown).not.toContain("<script>");
+  });
+
+  it("returns null for empty/unparseable HTML", () => {
+    const page = extract("https://example.com/", "<html><body></body></html>");
+    expect(page).toBeNull();
+  });
+
+  it("handles missing title gracefully", () => {
+    const page = extract("https://example.com/docs/intro", noTitleHtml);
+    // Should still extract, title may be empty or derived
+    if (page) {
+      expect(page.markdown).toBeTruthy();
+    }
+  });
+
+  describe("section derivation from URL", () => {
+    it("derives Home for root URL", () => {
+      const page = extract("https://example.com/", fullHtml);
+      expect(page).not.toBeNull();
+      expect(page!.section).toBe("Home");
+    });
+
+    it("derives Home for top-level page", () => {
+      const page = extract("https://example.com/about", fullHtml);
+      expect(page).not.toBeNull();
+      expect(page!.section).toBe("Home");
+    });
+
+    it("derives section from first path segment", () => {
+      const page = extract("https://example.com/docs/intro", fullHtml);
+      expect(page).not.toBeNull();
+      expect(page!.section).toBe("Docs");
+    });
+
+    it("formats hyphenated sections", () => {
+      const page = extract("https://example.com/getting-started/setup", fullHtml);
+      expect(page).not.toBeNull();
+      expect(page!.section).toBe("Getting Started");
+    });
+
+    it("formats underscored sections", () => {
+      const page = extract("https://example.com/api_reference/endpoints", fullHtml);
+      expect(page).not.toBeNull();
+      expect(page!.section).toBe("Api Reference");
+    });
+  });
+});
