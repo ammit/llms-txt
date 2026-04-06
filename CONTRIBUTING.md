@@ -1,32 +1,63 @@
 # Contributing
 
-Thanks for wanting to contribute. Here's how to get started.
+Thanks for your interest in contributing to llms-txt!
 
-## Setup
+## Development Setup
 
 ```bash
-git clone https://github.com/ammit/llms-txt.git
+git clone https://github.com/ammit/llms-txt
 cd llms-txt
 npm install
-npm run build
 ```
 
-## Running tests
+## Commands
+
+| Command | What it does |
+|---------|-------------|
+| `npm run build` | Compile TypeScript to `dist/` |
+| `npm run dev` | Watch mode |
+| `npm run lint` | Type-check with tsc |
+| `npm run test` | Run all tests |
+| `make run URL=https://example.com` | Run the CLI locally |
+
+## Architecture
+
+The pipeline is: **crawler → extractor → generator**
+
+- `src/core/crawler.ts` -- discovers and fetches pages (sitemap + link following)
+- `src/core/extractor.ts` -- cleans HTML with Readability, converts to markdown via Turndown
+- `src/core/generator.ts` -- assembles the llms.txt output
+- `src/commands/generate.ts` -- orchestrates the pipeline, handles CLI I/O
+- `src/index.ts` -- CLI entry point via commander.js
+
+## Commit Convention
+
+We use [Conventional Commits](https://www.conventionalcommits.org/):
+
+- `feat:` new feature (bumps minor version)
+- `fix:` bug fix (bumps patch version)
+- `test:` test changes only
+- `ci:` CI/CD changes
+- `docs:` documentation only
+- `chore:` maintenance, deps, config
+- `refactor:` code change with no behavior change
+
+Breaking changes: add `!` after the type (e.g. `feat!:`) or add `BREAKING CHANGE:` in the commit body.
+
+## Pull Requests
+
+- Add tests for new behavior
+- Keep changes focused -- one thing per PR
+- No speculative features. Only build what's needed (YAGNI)
+- Run `npm run lint && npm run test` before pushing
+- PRs that touch `src/core/crawler.ts` should include integration test coverage
+
+## Running Integration Tests
+
+The integration tests spin up a local HTTP server:
 
 ```bash
 npm run test
 ```
 
-## Making changes
-
-1. Open an issue first to discuss what you want to change.
-2. Fork the repo and create a branch from `main`.
-3. Make your changes. Keep PRs focused on a single thing.
-4. Run `npm run lint` and `npm run test` before submitting.
-5. Open a pull request and reference the issue.
-
-## Code style
-
-- TypeScript with strict mode enabled.
-- No linting tool configured yet. Follow existing patterns in the codebase.
-- Keep things simple and readable.
+All tests (unit + integration) are in the `test/` directory.
