@@ -1,6 +1,6 @@
 {
   "name": "llms-txt-gen",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Generate llms.txt files for any website. Make your site AI-friendly.",
   "keywords": [
     "llms",
