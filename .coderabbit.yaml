@@ -1,0 +1,29 @@
+language: "en-US"
+tone_instructions: "Be direct and assertive. Focus on correctness, robustness, and simplicity. Skip compliments."
+reviews:
+  profile: "assertive"
+  request_changes_workflow: true
+  high_level_summary: true
+  poem: false
+  review_status: true
+  auto_review:
+    enabled: true
+    drafts: false
+  path_instructions:
+    - path: "src/core/crawler.ts"
+      instructions: |
+        Focus on: network error handling, rate limiting correctness, memory safety (stream caps, large HTML),
+        robots.txt compliance, URL normalization edge cases, and abort signal propagation.
+    - path: "src/core/extractor.ts"
+      instructions: |
+        Focus on: Readability edge cases, content length thresholds, redirect detection,
+        and section derivation correctness.
+    - path: "src/**/*.ts"
+      instructions: |
+        Enforce: no speculative features (YAGNI), explicit error types, no unnecessary abstractions.
+        Prefer simple imperative code over clever patterns.
+    - path: "test/**/*.ts"
+      instructions: |
+        Ensure tests cover edge cases, not just happy paths. No mocking of core logic — use real HTML fixtures.
+chat:
+  auto_reply: true
