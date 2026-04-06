@@ -81,23 +81,21 @@ function getDescription(doc: Document): string {
 
 function deriveSection(url: string): string {
   const pathname = new URL(url).pathname;
-  const parts = pathname.split("/").filter(Boolean);
+  // Strip common file extensions before splitting
+  const cleanPath = pathname.replace(/\.(html|htm|php)$/, "");
+  const parts = cleanPath.split("/").filter(Boolean);
 
   if (parts.length === 0) return "Home";
 
-  // Use first path segment as section, strip file extensions
-  const segment = parts[0].replace(/\.[^.]+$/, "");
-  if (parts.length === 1 && pathname === `/${parts[0]}`) {
-    // Top-level page (e.g., /about.html) goes to Home
-    return "Home";
-  }
+  // Top-level pages (single segment like /about) go to Home
+  if (parts.length === 1) return "Home";
 
-  return formatSection(segment);
+  // Use first path segment as section
+  return formatSection(parts[0]);
 }
 
 function formatSection(segment: string): string {
   return segment
-    .replace(/\.[^.]+$/, "")
     .replace(/[-_]/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }

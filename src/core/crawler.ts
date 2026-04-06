@@ -62,19 +62,24 @@ export async function crawl(
       const normalized = normalizeUrl(url);
       if (visited.has(normalized)) {
         skipped++;
+        if (options.verbose) console.error(`[skip] duplicate: ${normalized}`);
         return;
       }
-      if (!isAllowed(normalized, robots, baseUrl, options)) {
+
+      const skipReason = getSkipReason(normalized, robots, baseUrl, options);
+      if (skipReason) {
         skipped++;
+        if (options.verbose) console.error(`[skip] ${skipReason}: ${normalized}`);
         return;
       }
       visited.add(normalized);
 
       try {
         await rateLimitDelay(options.rate);
-        const html = await fetchPage(normalized);
+        const html = await fetchPage(normalized, options.timeout, options.verbose);
         if (!html) {
           skipped++;
+          if (options.verbose) console.error(`[skip] non-HTML or failed: ${normalized}`);
           onProgress?.({
             phase: "crawling",
             url: normalized,
@@ -145,13 +150,14 @@ async function discoverFromSitemaps(sitemapUrls: string[]): Promise<string[]> {
   return urls;
 }
 
-async function fetchPage(url: string): Promise<string | null> {
+async function fetchPage(url: string, timeout: number, verbose: boolean): Promise<string | null> {
   try {
     const res = await fetch(url, {
       headers: {
         "User-Agent": "llms-txt/0.1 (+https://github.com/ammit/llms-txt)",
         Accept: "text/html",
       },
+      signal: AbortSignal.timeout(timeout),
     });
 
     if (!res.ok) return null;
@@ -159,7 +165,10 @@ async function fetchPage(url: string): Promise<string | null> {
     if (!contentType.includes("text/html")) return null;
 
     return await res.text();
-  } catch {
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "TimeoutError") {
+      if (verbose) console.error(`[skip] timeout: ${url}`);
+    }
     return null;
   }
 }
@@ -202,6 +211,14 @@ function normalizeUrl(url: string): string {
   if (u.pathname !== "/" && u.pathname.endsWith("/")) {
     u.pathname = u.pathname.slice(0, -1);
   }
+  // Strip index files (index.html, index.htm, index.php) to parent path
+  u.pathname = u.pathname.replace(/\/index\.(html|htm|php)$/, "/");
+  // Normalize trailing slash again after index strip
+  if (u.pathname !== "/" && u.pathname.endsWith("/")) {
+    u.pathname = u.pathname.slice(0, -1);
+  }
+  // Strip common extensions for dedup (.html, .htm, .php)
+  u.pathname = u.pathname.replace(/\.(html|htm|php)$/, "");
   return u.href;
 }
 
@@ -211,27 +228,36 @@ function isAllowed(
   baseUrl: string,
   options: CrawlOptions,
 ): boolean {
+  return getSkipReason(url, robots, baseUrl, options) === null;
+}
+
+function getSkipReason(
+  url: string,
+  robots: { isAllowed: (url: string) => boolean | undefined },
+  baseUrl: string,
+  options: CrawlOptions,
+): string | null {
   // Check robots.txt
-  if (robots.isAllowed(url) === false) return false;
+  if (robots.isAllowed(url) === false) return "robots.txt blocked";
 
   // Check include/exclude patterns
   const path = new URL(url).pathname;
   const base = new URL(baseUrl).hostname;
   const urlHost = new URL(url).hostname;
 
-  if (urlHost !== base) return false;
+  if (urlHost !== base) return "excluded";
 
   if (options.include.length > 0) {
     if (!options.include.some((pattern) => matchGlob(path, pattern)))
-      return false;
+      return "excluded";
   }
 
   if (options.exclude.length > 0) {
     if (options.exclude.some((pattern) => matchGlob(path, pattern)))
-      return false;
+      return "excluded";
   }
 
-  return true;
+  return null;
 }
 
 function matchGlob(path: string, pattern: string): boolean {
