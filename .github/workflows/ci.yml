@@ -30,7 +30,7 @@ jobs:
           fetch-depth: 1
       - uses: ./.github/actions/setup
       - run: npx vitest run --coverage test/extractor.test.ts test/generator.test.ts test/robots.test.ts
-      - uses: codecov/codecov-action@v5
+      - uses: codecov/codecov-action@v6
         with:
           fail_ci_if_error: false
 
